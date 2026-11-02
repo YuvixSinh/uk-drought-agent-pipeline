@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UK Orbital Globe</title>
+<style>
+  :root {
+    --bg: #070D1B;
+    --bg-deep: #040813;
+    --panel: #0C1730;
+    --panel-raised: #13244A;
+    --border: #2B4178;
+    --border-glow: rgba(77, 232, 255, 0.5);
+    --text: #F4F8FF;
+    --text-dim: #BCCBE8;
+    --text-faint: #8FA1C6;
+    --cyan: #4DE8FF;
+    --blue: #3A78FF;
+    --violet: #B3A6FF;
+    --low: #4BE3A5;
+    --watch: #FFC247;
+    --elevated: #FF6B88;
+    --font-ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Cascadia Mono', Consolas, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font-ui);
+    user-select: none;
+  }
+
+  #globe-root {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 50% 48%, #0A1632 0%, var(--bg-deep) 74%);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  }
+
+  #globe-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+
+  /* Top-left selected-point card */
+  .overlay-card {
+    position: absolute;
+    background: rgba(12, 23, 48, 0.90);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    z-index: 10;
+    pointer-events: auto;
+  }
+
+  #selected-card {
+    top: 16px;
+    left: 16px;
+    min-width: 310px;
+    max-width: 380px;
+    transition: border-color 180ms ease-out, box-shadow 180ms ease-out;
+  }
+
+  #selected-card.has-valid {
+    border-color: var(--border-glow);
+    box-shadow: 0 0 24px rgba(77, 232, 255, 0.22);
+  }
+
+  #selected-card.has-rejected {
+    border-color: rgba(255, 107, 136, 0.65);
+  }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .coord-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .meta-line {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+
+  .meta-line .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--cyan);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .status-pill.valid {
+    background: rgba(75, 227, 165, 0.12);
+    border: 1px solid rgba(75, 227, 165, 0.55);
+    color: var(--low);
+  }
+
+  .status-pill.near-coast {
+    background: rgba(255, 194, 71, 0.14);
+    border: 1px solid rgba(255, 194, 71, 0.65);
+    color: var(--watch);
+  }
+
+  .status-pill.rejected {
+    background: rgba(255, 107, 136, 0.14);
+    border: 1px solid rgba(255, 107, 136, 0.65);
+    color: var(--elevated);
+  }
+
+  /* Idle overlay prompt */
+  #idle-overlay {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(12, 23, 48, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--text-dim);
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 200ms ease-out;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan);
+  }
+
+  /* Hover cursor lat/lon pill */
+  #hover-readout {
+    position: absolute;
+    top: 58px;
+    right: 16px;
+    background: rgba(7, 13, 27, 0.85);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: var(--text-dim);
+    z-index: 10;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+
+  #hover-readout.visible {
+    opacity: 1;
+  }
+
+  /* Bottom-left legend */
+  #legend-card {
+    bottom: 16px;
+    left: 16px;
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .swatch.uk {
+    background: #16305E;
+    border: 1.5px solid rgba(77, 232, 255, 0.85);
+  }
+
+  .swatch.world {
+    background: #0E1A36;
+    border: 1px solid #2A4A8A;
+  }
+
+  .swatch.city {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+  }
+
+  .swatch.pending {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    border: 2px solid var(--cyan);
+  }
+
+  /* Bottom-right Reset view */
+  #controls-card {
+    bottom: 16px;
+    right: 16px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 160ms ease-out;
+    border: 1px solid var(--border);
+    background: var(--panel-raised);
+    color: var(--text);
+  }
+
+  .btn:hover {
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(77, 232, 255, 0.25);
+  }
+
+  .btn-primary {
+    background: var(--cyan);
+    color: #040813;
+    border-color: var(--cyan);
+    font-weight: 700;
+  }
+
+  .btn-primary:hover {
+    background: #72EEFF;
+    box-shadow: 0 0 20px rgba(77, 232, 255, 0.45);
+  }
+
+  /* Bottom-centre Confirm bar */
+  #confirm-bar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: rgba(19, 36, 74, 0.96);
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 0 28px rgba(77, 232, 255, 0.3), 0 16px 40px rgba(0, 0, 0, 0.5);
+    z-index: 15;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease-out, transform 180ms ease-out;
+  }
+
+  #confirm-bar.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .confirm-coord {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .kbd-hint {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+
+  /* 2D Fallback Picker if WebGL is unavailable */
+  #fallback-2d {
+    display: none;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: var(--bg-deep);
+    padding: 20px;
+  }
+
+  #fallback-2d.active {
+    display: flex;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, #confirm-bar, #selected-card, .btn {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="globe-root" tabindex="0">
+  <div id="globe-canvas"></div>
+
+  <!-- 2D SVG Fallback if WebGL fails -->
+  <div id="fallback-2d">
+    <div style="margin-bottom:8px; color:var(--text-dim); font-size:14px;">
+      2D UK Point-Picker Fallback (WebGL unavailable) — Click anywhere on UK land:
+    </div>
+    <svg id="svg-uk-picker" width="420" height="520" viewBox="0 0 420 520" style="background:#070D1B; border:1px solid #2B4178; border-radius:10px; cursor:crosshair;"></svg>
+  </div>
+
+  <!-- Top-left Selected Point Card -->
+  <div id="selected-card" class="overlay-card">
+    <div class="eyebrow">Selected Point</div>
+    <div id="sel-main" class="coord-mono">Click anywhere on UK land.</div>
+    <div id="sel-grid" class="meta-line" style="display:none;"></div>
+    <div id="sel-context" class="meta-line" style="display:none;"></div>
+    <div id="sel-badge-wrap"></div>
+  </div>
+
+  <!-- Top-right Idle notice & hover cursor readout -->
+  <div id="idle-overlay">
+    <span class="pulse-dot"></span>
+    <span id="idle-text">Click anywhere on UK land.</span>
+  </div>
+  <div id="hover-readout">Cursor: --.----°, --.----°</div>
+
+  <!-- Bottom-left Legend -->
+  <div id="legend-card" class="overlay-card">
+    <div class="eyebrow" style="margin-bottom:2px;">Globe Legend</div>
+    <div class="legend-row"><span class="swatch uk"></span><span>UK land (clickable)</span></div>
+    <div class="legend-row"><span class="swatch world"></span><span>Non-UK / Sea (rejected)</span></div>
+    <div class="legend-row"><span class="swatch city"></span><span>Quick-launch city shortcut</span></div>
+    <div class="legend-row"><span class="swatch pending"></span><span>Pending selection</span></div>
+  </div>
+
+  <!-- Bottom-right Reset View -->
+  <div id="controls-card" class="overlay-card">
+    <button id="btn-reset-view" class="btn" title="Return camera to full UK frame">Reset view</button>
+  </div>
+
+  <!-- Bottom-centre Docked Confirm Bar -->
+  <div id="confirm-bar">
+    <div>
+      <div id="confirm-coord-text" class="confirm-coord">52.2053°N, 0.1218°E</div>
+      <div class="kbd-hint">Enter to confirm · Esc to clear</div>
+    </div>
+    <button id="btn-confirm" class="btn btn-primary">Confirm and analyse</button>
+    <button id="btn-clear" class="btn">Clear</button>
+  </div>
+</div>
+
+<script src="./globe.gl.min.js"></script>
+<script>
+(function() {
+  const DEFAULT_POV = { lat: 54.5, lng: -3.0, altitude: 1.6 };
+  const REDUCED_MOTION = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let globe = null;
+  let worldGeo = null;
+  let uk10mGeo = null;
+  let hasInteracted = false;
+  let lastClickTime = 0;
+  let lastAppliedSyncToken = null;
+  let currentPending = null; // { lat, lon, valid, status, land_status, context, grid_cell }
+  let fadeTimeout = null;
+  let currentCities = [];
+
+  // Streamlit communication helpers
+  function sendToStreamlit(type, payload) {
+    window.parent.postMessage(Object.assign({
+      isStreamlitMessage: true,
+      type: type
+    }, payload || {}), "*");
+  }
+
+  function emitValue(val) {
+    sendToStreamlit("streamlit:setComponentValue", { value: val });
+  }
+
+  // Point-in-polygon helper on uk_10m.geojson for instant client-side feedback
+  function pointInRing(lon, lat, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const xi = ring[i][0], yi = ring[i][1];
+      const xj = ring[j][0], yj = ring[j][1];
+      const intersect = ((yi > lat) !== (yj > lat)) &&
+        (lon < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-12) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  function pointInPoly(lon, lat, rings) {
+    if (!rings || !rings.length || !pointInRing(lon, lat, rings[0])) return false;
+    for (let k = 1; k < rings.length; k++) {
+      if (pointInRing(lon, lat, rings[k])) return false;
+    }
+    return true;
+  }
+
+  function minDistKm(lon, lat, ring) {
+    const cosLat = Math.cos(lat * Math.PI / 180);
+    let minD2 = Infinity;
+    for (let i = 0; i < ring.length; i++) {
+      const x1 = ring[i][0], y1 = ring[i][1];
+      const x2 = ring[(i + 1) % ring.length][0], y2 = ring[(i + 1) % ring.length][1];
+      const dx = (x2 - x1) * cosLat * 111.32;
+      const dy = (y2 - y1) * 111.32;
+      const px = (lon - x1) * cosLat * 111.32;
+      const py = (lat - y1) * 111.32;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 > 1e-12 ? Math.max(0, Math.min(1, (px * dx + py * dy) / len2)) : 0;
+      const d2 = (px - t * dx) ** 2 + (py - t * dy) ** 2;
+      if (d2 < minD2) minD2 = d2;
+    }
+    return Math.sqrt(minD2);
+  }
+
+  function classifyPointJS(lat, lon) {
+    const gridLat = (Math.round(lat / 0.1) * 0.1).toFixed(2);
+    const gridLon = (Math.round(lon / 0.1) * 0.1).toFixed(2);
+    const gridCell = `${gridLat}°, ${gridLon}°`;
+
+    if (!uk10mGeo || lat < 49.7 || lat > 61.2 || lon < -8.8 || lon > 2.1) {
+      return {
+        valid: false,
+        status: "non_uk",
+        unit: null,
+        land_status: "Not UK land. No data requested.",
+        context: "Sea or non-UK territory",
+        grid_cell: gridCell
+      };
+    }
+
+    let bestUnit = null;
+    let minDist = Infinity;
+    for (const feat of uk10mGeo.features) {
+      const unit = (feat.properties && feat.properties.unit) || "UK";
+      const geom = feat.geometry;
+      const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
+      for (const poly of polys) {
+        if (pointInPoly(lon, lat, poly)) {
+          return {
+            valid: true,
+            status: "uk_land",
+            unit: unit,
+            land_status: `UK land · ${unit}`,
+            context: `Broad region: ${unit}`,
+            grid_cell: gridCell
+          };
+        }
+        const d = minDistKm(lon, lat, poly[0]);
+        if (d < minDist) {
+          minDist = d;
+          bestUnit = unit;
+        }
+      }
+    }
+
+    if (minDist <= 3.5 && bestUnit) {
+      return {
+        valid: true,
+        status: "near_coast",
+        unit: bestUnit,
+        land_status: `Near coast · classification uncertain (${bestUnit}, ~${minDist.toFixed(1)} km)`,
+        context: `Coastal margin · ${bestUnit}`,
+        grid_cell: gridCell
+      };
+    }
+
+    return {
+      valid: false,
+      status: "non_uk",
+      unit: null,
+      land_status: "Not UK land. No data requested.",
+      context: "Sea or non-UK territory",
+      grid_cell: gridCell
+    };
+  }
+
+  function formatLatLon(lat, lon) {
+    const ns = lat >= 0 ? "N" : "S";
+    const ew = lon >= 0 ? "E" : "W";
+    return `${Math.abs(lat).toFixed(4)}°${ns}, ${Math.abs(lon).toFixed(4)}°${ew} (${lat.toFixed(4)}, ${lon.toFixed(4)})`;
+  }
+
+  function updateOverlays(sel) {
+    const card = document.getElementById("selected-card");
+    const main = document.getElementById("sel-main");
+    const grid = document.getElementById("sel-grid");
+    const ctx = document.getElementById("sel-context");
+    const badgeWrap = document.getElementById("sel-badge-wrap");
+    const confirmBar = document.getElementById("confirm-bar");
+    const confirmCoord = document.getElementById("confirm-coord-text");
+    const idleOverlay = document.getElementById("idle-overlay");
+
+    card.classList.remove("has-valid", "has-rejected");
+
+    if (!sel) {
+      main.textContent = "Click anywhere on UK land.";
+      grid.style.display = "none";
+      ctx.style.display = "none";
+      badgeWrap.innerHTML = "";
+      confirmBar.classList.remove("visible");
+      idleOverlay.style.opacity = "1";
+      return;
+    }
+
+    idleOverlay.style.opacity = "0";
+    main.textContent = formatLatLon(sel.lat, sel.lon);
+
+    if (sel.valid) {
+      card.classList.add("has-valid");
+      grid.style.display = "block";
+      grid.innerHTML = `Model grid cell: <span class="mono">${sel.grid_cell || ""}</span>`;
+      ctx.style.display = "block";
+      ctx.textContent = sel.context || "";
+      const pillClass = sel.status === "near_coast" ? "near-coast" : "valid";
+      const icon = sel.status === "near_coast" ? "▲" : "●";
+      badgeWrap.innerHTML = `<div class="status-pill ${pillClass}"><span>${icon}</span><span>${sel.land_status}</span></div>`;
+      confirmCoord.textContent = `${sel.lat.toFixed(4)}, ${sel.lon.toFixed(4)} · ${sel.unit || "UK"}`;
+      confirmBar.classList.add("visible");
+    } else {
+      card.classList.add("has-rejected");
+      grid.style.display = "none";
+      ctx.style.display = "block";
+      ctx.textContent = "Selection outside UK land boundary.";
+      badgeWrap.innerHTML = `<div class="status-pill rejected"><span>✕</span><span>Not UK land. No data requested.</span></div>`;
+      confirmBar.classList.remove("visible");
+    }
+  }
+
+  function updateGlobeMarkers(sel, isTemporaryRejected) {
+    if (!globe) return;
+
+    const pts = [];
+    for (const c of currentCities) {
+      pts.push({
+        lat: c.lat,
+        lng: c.lon,
+        size: 0.012,
+        radius: 0.28,
+        color: "#4DE8FF",
+        isCity: true,
+        name: c.name
+      });
+    }
+
+    const rings = [];
+    if (sel) {
+      if (sel.valid) {
+        //Thin line to surface + bright white-cyan core
+        pts.push({
+          lat: sel.lat,
+          lng: sel.lon,
+          size: 0.055,
+          radius: 0.12,
+          color: "#4DE8FF",
+          isPendingStem: true
+        });
+        pts.push({
+          lat: sel.lat,
+          lng: sel.lon,
+          size: 0.008,
+          radius: 0.36,
+          color: "#FFFFFF",
+          isPendingCore: true
+        });
+        rings.push({
+          lat: sel.lat,
+          lng: sel.lon,
+          maxR: 1.9,
+          propagationSpeed: 1.4,
+          repeatPeriod: 800,
+          color: (t) => `rgba(77, 232, 255, ${Math.max(0, 1 - t)})`
+        });
+      } else if (isTemporaryRejected) {
+        pts.push({
+          lat: sel.lat,
+          lng: sel.lon,
+          size: 0.01,
+          radius: 0.32,
+          color: "#FF6B88",
+          isRejected: true
+        });
+        rings.push({
+          lat: sel.lat,
+          lng: sel.lon,
+          maxR: 1.3,
+          propagationSpeed: 1.6,
+          repeatPeriod: 1200,
+          color: (t) => `rgba(255, 107, 136, ${Math.max(0, 1 - t)})`
+        });
+      }
+    }
+
+    globe.pointsData(pts);
+    globe.ringsData(rings);
+  }
+
+  function stopIdleRotation() {
+    hasInteracted = true;
+    if (globe && globe.controls()) {
+      globe.controls().autoRotate = false;
+    }
+  }
+
+  function handleCoordinatePicked(lat, lon, source) {
+    const now = Date.now();
+    if (now - lastClickTime < 160) return; // debounce duplicate clicks
+    lastClickTime = now;
+
+    stopIdleRotation();
+    if (fadeTimeout) {
+      clearTimeout(fadeTimeout);
+      fadeTimeout = null;
+    }
+
+    const check = classifyPointJS(lat, lon);
+    currentPending = Object.assign({ lat: Number(lat.toFixed(4)), lon: Number(lon.toFixed(4)), source: source }, check);
+    updateOverlays(currentPending);
+
+    let povToSave = globe ? globe.pointOfView() : DEFAULT_POV;
+    if (check.valid && globe) {
+      const targetPov = { lat: Number(lat.toFixed(4)), lng: Number(lon.toFixed(4)), altitude: 0.6 };
+      globe.pointOfView(targetPov, REDUCED_MOTION ? 0 : 1000);
+      povToSave = targetPov;
+      updateGlobeMarkers(currentPending, false);
+    } else {
+      // Rejected click: show temporary marker that fades, no camera snap
+      updateGlobeMarkers(currentPending, true);
+      fadeTimeout = setTimeout(() => {
+        updateGlobeMarkers(null, false);
+      }, 1100);
+    }
+
+    emitValue({
+      action: "click",
+      lat: Number(lat.toFixed(4)),
+      lon: Number(lon.toFixed(4)),
+      source: source || "globe_click",
+      valid: check.valid,
+      status: check.status,
+      unit: check.unit,
+      land_status: check.land_status,
+      context: check.context,
+      grid_cell: check.grid_cell,
+      camera_pov: povToSave,
+      ts: now
+    });
+  }
+
+  function initFallback2D() {
+    document.getElementById("globe-canvas").style.display = "none";
+    const fb = document.getElementById("fallback-2d");
+    fb.classList.add("active");
+    const svg = document.getElementById("svg-uk-picker");
+    svg.innerHTML = "";
+
+    // Project lon [-9, 2.5], lat [49.8, 61.0] into 420x520 SVG
+    function proj(lon, lat) {
+      const x = ((lon - (-9.0)) / (2.5 - (-9.0))) * 380 + 20;
+      const y = ((61.0 - lat) / (61.0 - 49.8)) * 480 + 20;
+      return [x, y];
+    }
+    function unproj(x, y) {
+      const lon = ((x - 20) / 380) * (2.5 - (-9.0)) + (-9.0);
+      const lat = 61.0 - ((y - 20) / 480) * (61.0 - 49.8);
+      return [lat, lon];
+    }
+
+    if (uk10mGeo) {
+      for (const feat of uk10mGeo.features) {
+        const geom = feat.geometry;
+        const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
+        for (const poly of polys) {
+          const ring = poly[0];
+          const pts = ring.map(c => proj(c[0], c[1]).join(",")).join(" ");
+          const el = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          el.setAttribute("points", pts);
+          el.setAttribute("fill", "#16305E");
+          el.setAttribute("stroke", "rgba(77,232,255,0.7)");
+          el.setAttribute("stroke-width", "1");
+          svg.appendChild(el);
+        }
+      }
+    }
+
+    svg.addEventListener("click", (e) => {
+      const rect = svg.getBoundingClientRect();
+      const [lat, lon] = unproj(e.clientX - rect.left, e.clientY - rect.top);
+      handleCoordinatePicked(lat, lon, "fallback_2d");
+    });
+  }
+
+  async function initGlobe() {
+    const [wRes, ukRes] = await Promise.all([
+      fetch("./world_110m.geojson"),
+      fetch("./uk_10m.geojson")
+    ]);
+    worldGeo = await wRes.json();
+    uk10mGeo = await ukRes.json();
+
+    const container = document.getElementById("globe-canvas");
+    try {
+      // Check WebGL availability
+      const testCanvas = document.createElement("canvas");
+      const gl = testCanvas.getContext("webgl") || testCanvas.getContext("experimental-webgl");
+      if (!gl || typeof Globe === "undefined") {
+        initFallback2D();
+        return;
+      }
+
+      globe = Globe()(container)
+        .backgroundColor("#040813")
+        .width(container.clientWidth || 960)
+        .height(container.clientHeight || 820)
+        .showAtmosphere(true)
+        .atmosphereColor("#3A78FF")
+        .atmosphereAltitude(0.2)
+        .showGraticules(true)
+        .polygonsData(worldGeo.features)
+        .polygonAltitude(d => d.properties.iso === "GBR" ? 0.012 : 0.006)
+        .polygonCapColor(d => d.properties.iso === "GBR" ? "#16305E" : "#0E1A36")
+        .polygonSideColor(() => "rgba(14, 26, 54, 0.65)")
+        .polygonStrokeColor(d => d.properties.iso === "GBR" ? "rgba(77, 232, 255, 0.7)" : "#2A4A8A")
+        .pointLat("lat")
+        .pointLng("lng")
+        .pointAltitude("size")
+        .pointRadius("radius")
+        .pointColor("color")
+        .ringLat("lat")
+        .ringLng("lng")
+        .ringMaxRadius("maxR")
+        .ringPropagationSpeed("propagationSpeed")
+        .ringRepeatPeriod("repeatPeriod")
+        .ringColor("color")
+        .onGlobeClick((coords) => {
+          if (coords && typeof coords.lat === "number") {
+            handleCoordinatePicked(coords.lat, coords.lng, "globe_click");
+          }
+        })
+        .onPolygonClick((poly, event, coords) => {
+          if (coords && typeof coords.lat === "number") {
+            handleCoordinatePicked(coords.lat, coords.lng, "globe_click");
+          }
+        })
+        .onPointClick((pt, event, coords) => {
+          if (pt && pt.isCity) {
+            handleCoordinatePicked(pt.lat, pt.lng, `city_chip:${pt.name}`);
+          } else if (coords && typeof coords.lat === "number") {
+            handleCoordinatePicked(coords.lat, coords.lng, "globe_click");
+          }
+        });
+
+      globe.pointOfView(DEFAULT_POV, 0);
+
+      // Slow idle rotation until first interaction
+      const controls = globe.controls();
+      if (controls) {
+        controls.autoRotate = !REDUCED_MOTION;
+        controls.autoRotateSpeed = 0.25;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 115;
+        controls.maxDistance = 420;
+        controls.addEventListener("start", () => {
+          stopIdleRotation();
+        });
+      }
+
+      // Gentle 5s atmosphere pulse
+      if (!REDUCED_MOTION) {
+        let t0 = performance.now();
+        function pulseAtm(now) {
+          if (globe) {
+            const phase = ((now - t0) % 5000) / 5000;
+            const alt = 0.19 + 0.02 * Math.sin(phase * Math.PI * 2);
+            globe.atmosphereAltitude(alt);
+          }
+          requestAnimationFrame(pulseAtm);
+        }
+        requestAnimationFrame(pulseAtm);
+      }
+
+      // Hover cursor lat/lng readout (never selects)
+      const hoverReadout = document.getElementById("hover-readout");
+      container.addEventListener("mousemove", (e) => {
+        if (!globe) return;
+        const rect = container.getBoundingClientRect();
+        const coords = globe.toGlobeCoords(e.clientX - rect.left, e.clientY - rect.top);
+        if (coords && typeof coords.lat === "number" && typeof coords.lng === "number") {
+          hoverReadout.textContent = `Cursor: ${coords.lat.toFixed(4)}°, ${coords.lng.toFixed(4)}°`;
+          hoverReadout.classList.add("visible");
+        } else {
+          hoverReadout.classList.remove("visible");
+        }
+      });
+      container.addEventListener("mouseleave", () => {
+        hoverReadout.classList.remove("visible");
+      });
+
+      // Expose test hook on window for automated Stage 0/1 verification
+      window.__ukGlobePick = handleCoordinatePicked;
+      window.__ukGlobeInstance = globe;
+
+      window.addEventListener("resize", () => {
+        if (globe) {
+          globe.width(container.clientWidth);
+          globe.height(container.clientHeight);
+        }
+      });
+
+      updateGlobeMarkers(currentPending, false);
+    } catch (err) {
+      console.error("WebGL Globe error, switching to 2D picker:", err);
+      initFallback2D();
+    }
+  }
+
+  // UI Button handlers
+  document.getElementById("btn-reset-view").addEventListener("click", () => {
+    stopIdleRotation();
+    if (globe) {
+      globe.pointOfView(DEFAULT_POV, REDUCED_MOTION ? 0 : 900);
+    }
+    emitValue({
+      action: "reset_view",
+      camera_pov: DEFAULT_POV,
+      ts: Date.now()
+    });
+  });
+
+  document.getElementById("btn-confirm").addEventListener("click", () => {
+    if (!currentPending || !currentPending.valid) return;
+    const pov = globe ? globe.pointOfView() : DEFAULT_POV;
+    emitValue({
+      action: "confirm",
+      lat: currentPending.lat,
+      lon: currentPending.lon,
+      source: currentPending.source || "globe_click",
+      valid: true,
+      status: currentPending.status,
+      unit: currentPending.unit,
+      land_status: currentPending.land_status,
+      context: currentPending.context,
+      grid_cell: currentPending.grid_cell,
+      camera_pov: pov,
+      ts: Date.now()
+    });
+  });
+
+  document.getElementById("btn-clear").addEventListener("click", () => {
+    currentPending = null;
+    updateOverlays(null);
+    updateGlobeMarkers(null, false);
+    const pov = globe ? globe.pointOfView() : DEFAULT_POV;
+    emitValue({
+      action: "clear",
+      camera_pov: pov,
+      ts: Date.now()
+    });
+  });
+
+  // Keyboard shortcuts: Enter confirms, Esc clears
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && currentPending && currentPending.valid) {
+      e.preventDefault();
+      document.getElementById("btn-confirm").click();
+    } else if (e.key === "Escape" && currentPending) {
+      e.preventDefault();
+      document.getElementById("btn-clear").click();
+    }
+  });
+
+  // Listen to Streamlit render events
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    const args = data.args || {};
+
+    const frameHeight = args.height || 820;
+    sendToStreamlit("streamlit:setFrameHeight", { height: frameHeight });
+
+    if (Array.isArray(args.cities)) {
+      currentCities = args.cities;
+    }
+
+    // Apply external sync from Python (e.g., city chip clicked, manual lat/lon entered, or returning from Screen 3)
+    const syncToken = args.sync_token;
+    if (syncToken && syncToken !== lastAppliedSyncToken) {
+      lastAppliedSyncToken = syncToken;
+      if (args.camera_pov && globe) {
+        stopIdleRotation();
+        globe.pointOfView(args.camera_pov, REDUCED_MOTION ? 0 : (args.fly_duration || 800));
+      }
+      if (args.pending_selection) {
+        currentPending = args.pending_selection;
+        updateOverlays(currentPending);
+        updateGlobeMarkers(currentPending, !currentPending.valid);
+      } else {
+        currentPending = null;
+        updateOverlays(null);
+        updateGlobeMarkers(null, false);
+      }
+    } else if (globe && currentCities.length) {
+      updateGlobeMarkers(currentPending, false);
+    }
+  });
+
+  initGlobe().then(() => {
+    sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+    sendToStreamlit("streamlit:setFrameHeight", { height: 820 });
+  });
+})();
+</script>
+</body>
+</html>

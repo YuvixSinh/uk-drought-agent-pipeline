@@ -1,0 +1,10 @@
+# Pinned Python dependencies for Orbital Agronomist (v5 FastAPI + SSE Backend)
+# Reuses root-level agronomy/weather/Gemini modules without breaking Streamlit v2.
+fastapi==0.162.0
+starlette==1.10.0
+uvicorn==0.54.0
+pydantic==2.13.2
+google-genai==1.73.1
+python-dotenv==1.2.2
+shapely==2.1.2
+websockets==16.0

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ORBITAL AGRONOMIST · Stage 0 Spike</title>
+  <style>
+    @font-face {
+      font-family: 'Inter Variable';
+      font-style: normal;
+      font-weight: 100 900;
+      font-display: swap;
+      src: url('/vendor/fonts/inter-latin-wght-normal.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url('/vendor/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+    }
+    :root {
+      --bg: #05070B;
+      --bg-2: #0A0E14;
+      --accent: #FFB454;
+      --accent-glow: rgba(255, 180, 84, 0.35);
+      --ink: #F4F6FA;
+      --ink-2: rgba(244, 246, 250, 0.72);
+      --ink-3: rgba(244, 246, 250, 0.55);
+      --line: rgba(255, 255, 255, 0.10);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Inter Variable', system-ui, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #globe-stage0 {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+    .hud {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      z-index: 10;
+      background: rgba(10, 14, 20, 0.85);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 20px;
+      width: 420px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+    .hud h1 {
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .row { margin-top: 8px; color: var(--ink-2); line-height: 1.5; }
+    .btn-bar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    button {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent); color: var(--bg); }
+  </style>
+</head>
+<body>
+  <div id="globe-stage0"></div>
+  <div class="hud">
+    <h1>ORBITAL AGRONOMIST · STAGE 0 SPIKE</h1>
+    <div class="row" id="validate-out">Click globe or test buttons to validate UK coordinate...</div>
+    <div class="row" id="sse-out">SSE status: connecting...</div>
+    <div class="btn-bar">
+      <button id="btn-cam">Test Cambridge</button>
+      <button id="btn-edi">Test Edinburgh</button>
+      <button id="btn-sea">Test Irish Sea</button>
+    </div>
+  </div>
+
+  <script src="/vendor/globe.gl.min.js"></script>
+  <script type="module">
+    const validateOut = document.getElementById('validate-out');
+    const sseOut = document.getElementById('sse-out');
+
+    async function validatePoint(lat, lon, source = 'globe') {
+      const resp = await fetch('/api/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lon }),
+      });
+      const data = await resp.json();
+      window.__lastValidate = data;
+      validateOut.textContent = `[${source}] (${data.lat}, ${data.lon}) -> valid=${data.valid} | nation=${data.nation || 'None'} | grid=${data.grid_cell}`;
+      return data;
+    }
+
+    document.getElementById('btn-cam').addEventListener('click', () => validatePoint(52.2053, 0.1218, 'btn:Cambridge'));
+    document.getElementById('btn-edi').addEventListener('click', () => validatePoint(55.9533, -3.1883, 'btn:Edinburgh'));
+    document.getElementById('btn-sea').addEventListener('click', () => validatePoint(53.5000, -5.0000, 'btn:IrishSea'));
+
+    // Connect SSE stream
+    window.__sseEvents = [];
+    const es = new EventSource('/api/spike/events?run_id=stage0_browser');
+    ['source', 'agent', 'progress', 'done'].forEach((evType) => {
+      es.addEventListener(evType, (e) => {
+        const parsed = JSON.parse(e.data);
+        window.__sseEvents.push(parsed);
+        sseOut.textContent = `SSE events received: ${window.__sseEvents.length} (last: ${parsed.type})`;
+        if (parsed.type === 'done') {
+          es.close();
+        }
+      });
+    });
+
+    // Load bundled GeoJSONs (zero runtime CDN)
+    const [worldGeo, ukGeo] = await Promise.all([
+      fetch('/vendor/world_110m.geojson').then((r) => r.json()),
+      fetch('/vendor/uk_10m.geojson').then((r) => r.json()),
+    ]);
+
+    const container = document.getElementById('globe-stage0');
+    const globe = Globe()(container)
+      .width(window.innerWidth)
+      .height(window.innerHeight)
+      .backgroundColor('#05070B')
+      .showAtmosphere(true)
+      .atmosphereColor('#FFB454')
+      .atmosphereAltitude(0.12)
+      .hexPolygonsData(worldGeo.features)
+      .hexPolygonResolution(3)
+      .hexPolygonMargin(0.62)
+      .hexPolygonColor(() => 'rgba(244, 246, 250, 0.28)')
+      .polygonsData(ukGeo.features)
+      .polygonCapColor(() => 'rgba(255, 180, 84, 0.12)')
+      .polygonSideColor(() => 'rgba(255, 180, 84, 0.06)')
+      .polygonStrokeColor(() => '#FFB454')
+      .polygonAltitude(0.008)
+      .onGlobeClick(({ lat, lng }) => validatePoint(lat, lng, 'globeClick'))
+      .onPolygonClick((poly, event, { lat, lng }) => validatePoint(lat, lng, 'ukPolygonClick'))
+      .onHexPolygonClick((hex, event, { lat, lng }) => validatePoint(lat, lng, 'hexClick'));
+
+    const mat = globe.globeMaterial();
+    if (mat && mat.color) {
+      mat.color.set('#05070B');
+    }
+    globe.pointOfView({ lat: 54.5, lng: -2.8, altitude: 1.45 }, 0);
+    window.__stage0GlobeReady = true;
+    window.__validatePoint = validatePoint;
+  </script>
+</body>
+</html>

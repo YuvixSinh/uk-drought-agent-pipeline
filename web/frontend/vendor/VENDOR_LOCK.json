@@ -1,0 +1,47 @@
+{
+  "stack": "No-build Vanilla ES Modules + Vendored Pinned Libraries (Node/npm not installed on host)",
+  "packages": {
+    "globe.gl.min.js": {
+      "version": "2.35.1",
+      "license": "MIT",
+      "sha256": "6f9496cd59c360b6a033cd0e2e4e8039bc08f9682a31909c00728fdb147f835b",
+      "bytes": 1502415
+    },
+    "gsap.min.js": {
+      "version": "3.12.5",
+      "license": "Standard No-Charge GSAP License",
+      "sha256": "28033e449a31ebcc396e5be8b13b63152bf03094288fb5867034321927bce087",
+      "bytes": 72214
+    },
+    "world_110m.geojson": {
+      "version": "5.1.2 (Natural Earth 1:110m)",
+      "license": "Public Domain (CC0)",
+      "sha256": "55683c40ed3342374f61beb630f571a926c25164e7d393b613d6595bdd6533c9",
+      "bytes": 282066
+    },
+    "uk_10m.geojson": {
+      "version": "5.1.2 (Natural Earth 1:10m UK units)",
+      "license": "Public Domain (CC0)",
+      "sha256": "bf0ebf1a828207e95fc54271d22ae4b12de8e37660988a052b8182781bad3944",
+      "bytes": 190665
+    },
+    "fonts/inter-latin-wght-normal.woff2": {
+      "version": "5.1.0 (@fontsource-variable/inter)",
+      "license": "OFL-1.1",
+      "sha256": "f052ee44c3728dfd23aba8a4567150bc314d23903026fbb6ad089422c2df56af",
+      "bytes": 48444
+    },
+    "fonts/jetbrains-mono-latin-400-normal.woff2": {
+      "version": "5.1.0 (@fontsource/jetbrains-mono)",
+      "license": "OFL-1.1",
+      "sha256": "7c53386f55c866c1b4c9309c4bcf74eda10896aab3a1780b0af5cc4976e27a27",
+      "bytes": 21088
+    },
+    "fonts/jetbrains-mono-latin-500-normal.woff2": {
+      "version": "5.1.0 (@fontsource/jetbrains-mono)",
+      "license": "OFL-1.1",
+      "sha256": "4765dee1c0be507cde85c3de952bb24707b798f0e4002c360b9434d66c8bbc3c",
+      "bytes": 21820
+    }
+  }
+}
